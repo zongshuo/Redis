@@ -5,6 +5,12 @@ import org.junit.Assert;
 import org.junit.Test;
 import redis.clients.jedis.Jedis;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.Assert.*;
 
 /**
@@ -14,13 +20,84 @@ public class RedisFactoryTest {
 
     @Test
     public void testGetJedis() throws Exception {
-        Jedis jedis = RedisFactory.getJedis();
+        Jedis jedisString = RedisFactory.getJedis();
         //获取的对象不为空
-        Assert.assertNotNull(jedis);
+        Assert.assertNotNull(jedisString);
         //获取的值相等
-        Assert.assertEquals("PONG",jedis.ping());
+        Assert.assertEquals("PONG",jedisString.ping());
         //存活链接数量判断
         Assert.assertEquals(1, RedisFactory.getNumActive());
+        testStringType(jedisString);
+
+        Jedis jedisHash = RedisFactory.getJedis();
+        testHashType(jedisHash);
+
+        Jedis jedisList = RedisFactory.getJedis();
+        testListType(jedisList);
+
+        Jedis jedisSet = RedisFactory.getJedis();
+        testSetType(jedisSet);
+
+        Jedis jedisSortedSet = RedisFactory.getJedis();
+        testSortedSet(jedisSortedSet);
+
+        //关闭连接后判断存活连接数量
+        Assert.assertEquals(5, RedisFactory.getNumActive());
+
+        jedisHash.close();
+        jedisString.close();
+        RedisFactory.closePool();
+    }
+
+    private void testSortedSet(Jedis jedis){
+
+    }
+
+    private void testSetType(Jedis jedis){
+
+    }
+
+    private void testListType(Jedis jedis){
+
+    }
+
+    private void testHashType(Jedis jedis){
+        //判断增加和获取
+        jedis.hset("mapKey1", "key1", "value1");
+        jedis.hset("mapKey1", "key2", "value2");
+        Assert.assertEquals("value1", jedis.hget("mapKey1","key1"));
+        Assert.assertEquals("value2", jedis.hget("mapKey1", "key2"));
+
+        //map只能有一个key、value对，否则报hset的wrong number of arguments 错误
+        Map<String, String> map = new HashMap<>(2);
+        map.put("num1", "1");
+//        map.put("num2", "2");
+        jedis.hset("mapKey1", map);
+        Assert.assertNotNull(jedis.hget("mapKey1", "num1"));
+
+        //hgetAll返回的是某一个key下的所有key、value组成的map
+        Map<String, String> resultMap = new HashMap<>();
+        resultMap.put("key1", "value1");
+        resultMap.put("key2", "value2");
+        resultMap.put("num1", "1");
+        Assert.assertEquals(resultMap, jedis.hgetAll("mapKey1"));
+
+        //获取某一个key下的map长度
+        jedis.hdel("mapKey1", "key2");
+        Assert.assertTrue(!jedis.hexists("mapKey1", "key2"));
+        Assert.assertEquals(new Long(2), jedis.hlen("mapKey1"));
+
+        //设置存活时间
+        jedis.expire("mapKey1", 10);
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        Assert.assertTrue(!jedis.exists("mapKey1"));
+    }
+
+    private void testStringType(Jedis jedis){
         /*--------------------------String start--------------------------*/
         //获取不存在的key，返回null
         Assert.assertNull(jedis.get("testFlushDBKey"));
@@ -40,11 +117,22 @@ public class RedisFactoryTest {
         Assert.assertEquals("value1_reset_append", jedis.get("key1"));
         //方法返回当前连接到服务器的所有客户端信息
         System.out.println(jedis.clientList());
-        /*--------------------------String end--------------------------*/
-        jedis.close();
-        //关闭连接后判断存活连接数量
-        Assert.assertEquals(0, RedisFactory.getNumActive());
+        //判断批量获取结果是否正确
+        jedis.set("key2", "value2");
+        List<String> stringList = new ArrayList<>(2);
+        stringList.add("value1_reset_append");
+        stringList.add("value2");
+        Assert.assertEquals(stringList, jedis.mget("key1", "key2"));
+        //判断整数加减
+        jedis.set("number", "0");
+        Assert.assertEquals("1", String.valueOf(jedis.incr("number")));
+        Assert.assertEquals("0", String.valueOf(jedis.decr("number")));
 
-        RedisFactory.closePool();
+        //判断批量设置key
+        if(jedis.exists("mKey1")) jedis.del("mKey1");
+        if (jedis.exists("mKey2")) jedis.del("mKey2");
+        Assert.assertEquals("OK", jedis.mset("mKey1", "mValue1", "mKey2", "mValue2"));
+        Assert.assertEquals("OK", jedis.mset("mKey1", "mValue", "mKey2", "mValue2"));
+        /*--------------------------String end--------------------------*/
     }
 }
