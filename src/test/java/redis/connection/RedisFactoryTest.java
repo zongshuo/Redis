@@ -21,6 +21,7 @@ public class RedisFactoryTest {
     @Test
     public void testGetJedis() throws Exception {
         Jedis jedisString = RedisFactory.getJedis();
+        jedisString.flushDB();
         //获取的对象不为空
         Assert.assertNotNull(jedisString);
         //获取的值相等
@@ -30,7 +31,7 @@ public class RedisFactoryTest {
         testStringType(jedisString);
 
         Jedis jedisHash = RedisFactory.getJedis();
-        testHashType(jedisHash);
+//        testHashType(jedisHash);
 
         Jedis jedisList = RedisFactory.getJedis();
         testListType(jedisList);
@@ -44,6 +45,9 @@ public class RedisFactoryTest {
         //关闭连接后判断存活连接数量
         Assert.assertEquals(5, RedisFactory.getNumActive());
 
+        jedisSortedSet.close();
+        jedisSet.close();
+        jedisList.close();
         jedisHash.close();
         jedisString.close();
         RedisFactory.closePool();
@@ -58,6 +62,18 @@ public class RedisFactoryTest {
     }
 
     private void testListType(Jedis jedis){
+        jedis.lpush("listKey1", "firs", "second", "third");
+        jedis.lset("listKey1", 0, "first");
+        //左侧出栈
+        Assert.assertEquals("first", jedis.lpop("listKey1"));
+        //队列长度
+        Assert.assertEquals(new Long(2), jedis.llen("listKey1"));
+        //右侧入栈
+        jedis.rpush("listKey1","forth");
+        List<String> list = new ArrayList<>(1);
+        list.add("forth");
+        Assert.assertEquals(list, jedis.lrange("listKey1", -1, -1));
+
 
     }
 
